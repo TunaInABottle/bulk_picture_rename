@@ -13,8 +13,7 @@ import (
 // TODO flag to set date string manually (creation date is not copied)
 
 func main() {
-	//dir, _ := os.Stat(`/home/tonno/Desktop/20220516/Cuna Island`) // /TUNA1159.ORF
-	dir := `/home/tonno/Desktop/20220516/golang_test` // /TUNA1159.ORF
+	dir := `/home/tonno/Desktop/20220516/golang_test`
 
 	files, err := os.ReadDir(dir)
 	if err != nil {
@@ -25,27 +24,12 @@ func main() {
 	i := 0
  	for _, fi := range files {
 		i += 1
-		fileinfo, err := fi.Info()
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
-		}
-
-		
-		ph := create_file_class(fi)
-
-		fmt.Println( ph.name, " I did it" ) 
-
-
-		filetime := unix_filetime(fileinfo)    
-		
-		//fmt.Println( fileinfo.Sys() )
-		
 		idx := strconv.Itoa(i)
+		
 
-		fmt.Println( filetime, idx ) 
-
-		e := os.Rename(dir + "/" + fileinfo.Name(), dir + "/" + filetime + "_" + idx + ".ORF" ) // 
+		cur_file := create_file_class(fi)
+		e := os.Rename(dir + "/" + cur_file.full_name, 
+					   dir + "/" + cur_file.name + "_" + idx + "." + cur_file.extension ) // 
 		if e != nil {
 			log.Fatal(e)
 		}
@@ -97,7 +81,7 @@ func create_file_class(path os.DirEntry) File {
 		full_name: fname,
 		generated_date: unix_filetime(fileinfo),
 	}
-	
+
 	print(newFile.name, "\n")
 	print(newFile.full_name, "\n")
 
