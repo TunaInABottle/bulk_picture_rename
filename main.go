@@ -7,6 +7,7 @@ import (
 	"time"
 	"log"
 	"strconv"
+	"strings"
 	)
 
 // TODO flag to set date string manually (creation date is not copied)
@@ -29,6 +30,12 @@ func main() {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
+
+		
+		ph := create_file_class(fi)
+
+		fmt.Println( ph.name, " I did it" ) 
+
 
 		filetime := unix_filetime(fileinfo)    
 		
@@ -59,4 +66,40 @@ func unix_filetime(path os.FileInfo) string {
 
 	return unix_time.Format("20060115")
 
+}
+   
+
+
+/// class File
+
+// @TODO check that is not dir 
+
+type File struct {
+	name string
+	extension string
+	full_name string
+	generated_date string //time.Time
+}
+
+func create_file_class(path os.DirEntry) File {
+
+	fileinfo, err := path.Info()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	fname := fileinfo.Name()
+
+	newFile := File{ 
+		name: fname[:strings.LastIndex(fname, ".")],
+		extension: fname[strings.LastIndex(fname, ".")+1:],
+		full_name: fname,
+		generated_date: unix_filetime(fileinfo),
+	}
+	
+	print(newFile.name, "\n")
+	print(newFile.full_name, "\n")
+
+	return newFile
 }
