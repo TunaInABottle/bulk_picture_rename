@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"syscall"
 	"time"
-	"log"
-	"strconv"
+	// "log"
+	// "strconv"
 	"strings"
 	)
 
@@ -21,20 +21,51 @@ func main() {
 		os.Exit(1)
 	}
 
-	i := 0
- 	for _, fi := range files {
-		i += 1
-		idx := strconv.Itoa(i)
+	var ara_slice []File
+	for _, fi := range files {
+		cur_file := create_file_class(fi)
+
+		ara_slice = append(ara_slice, cur_file)
+	}
+
+	for _, el := range ara_slice {
+		fmt.Println(el.full_name)
+	}
+}
+
+func Contains(sl []string, name string) bool {
+	for _, value := range sl {
+	   if value == name {
+		  return true
+	   }
+	}
+	return false
+ }
+
+
+// func main() {
+// 	dir := `/home/tonno/Desktop/20220516/golang_test`
+
+// 	files, err := os.ReadDir(dir)
+// 	if err != nil {
+// 		fmt.Fprintln(os.Stderr, err)
+// 		os.Exit(1)
+// 	}
+
+// 	i := 0
+//  	for _, fi := range files {
+// 		i += 1
+// 		idx := strconv.Itoa(i)
 		
 
-		cur_file := create_file_class(fi)
-		e := os.Rename(dir + "/" + cur_file.full_name, 
-					   dir + "/" + cur_file.name + "_" + idx + "." + cur_file.extension ) // 
-		if e != nil {
-			log.Fatal(e)
-		}
-	}
-   }
+// 		cur_file := create_file_class(fi)
+// 		e := os.Rename(dir + "/" + cur_file.full_name, 
+// 					   dir + "/" + cur_file.generated_date + "_" + idx + "." + cur_file.extension ) // 
+// 		if e != nil {
+// 			log.Fatal(e)
+// 		}
+// 	}
+//    }
    
 
 func unix_filetime(path os.FileInfo) string {
@@ -53,6 +84,16 @@ func unix_filetime(path os.FileInfo) string {
 }
    
 
+/// class FileSet
+type FileSet struct {
+	set map[string][]File
+}
+
+func add(fileset FileSet, file File) FileSet {
+	fileset.set[file.name] = append(fileset.set[file.name], file)
+
+	return fileset
+}
 
 /// class File
 
