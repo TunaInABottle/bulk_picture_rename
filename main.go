@@ -5,13 +5,21 @@ import (
 	"fmt"
 	"syscall"
 	"time"
-	// "log"
+	"log"
 	"strconv"
 	"strings"
-
+	"errors"
 	)
 
-// TODO flag to set date string manually (creation date is not copied)
+// @TODO flag to set date string manually (creation date is not copied)
+// @TODO flag to override name prefix
+// @TODO flag to override name prefix length
+// @TODO flag for interval
+// @TODO prefix check
+// @TODO strategy to prevent renaming if a file cant be renamed
+
+// example: main.go --interval:400-600,606 --name:landscape
+// renames files from 400 to 600 and 606 by putting "landscape" in the name
 
 func main() {
 	dir := `/home/tonno/Desktop/20220516/golang_test`
@@ -22,49 +30,83 @@ func main() {
 		os.Exit(1)
 	}
 
-	var fileset FileSet
+	var fileset ImgFileSet
 
 	for _, fi := range files {
-		cur_file := Create_file_class(fi)
-
-		// ara_slice = append(ara_slice, cur_file)
+		cur_file := Create(fi)
 		fileset = fileset.Add(cur_file)
 	}
 
 	fileset.Print()
-
 	fileset.Rename(dir)
 
-	fmt.Println("Renaming done!")
-
 }
 
 
-
-
-/// class FileSet
-type FileSet struct {
-	set map[int][]File
+/// class ImgFileSet
+type ImgFileSet struct {
+	set map[int][]ImgFile
+	descr_idx map[string]map[string]int // date: [descr1: idx1, descr2: idx2] 
 }
 
-// TODO change name after renaming in FileSet ?
-func (fs FileSet) Rename(directory string) {
-	for key, files := range fs.set {
+// @TODO change name after renaming in ImgFileSet ?
+func (ifs ImgFileSet) Rename(directory string) {
+	if err := ifs.checkFutureNamesUniqueness(directory);
+	err != nil {
+		log.Fatal(err)
+	}
 
-		for _, file := range files{
-			// @TODO check if renaming file that exists23
-			os.Rename(
-				directory + "/" + file.full_name, 
-				directory + "/" + file.TidyName("", key))
+	for key, files := range ifs.set {
+		for _, file := range files {
+			newfilename := file.TidyName("", key)
+			if _, err := os.Stat(directory + "/" + newfilename);
+			err == nil {
+				//file exist
+				fmt.Println("Rename: the file already exists: ", newfilename )
+				continue
+			} else if os.IsNotExist(err) {
+				// our case, do the stuff
+				os.Rename(
+					directory + "/" + file.full_name, 
+					directory + "/" + newfilename)
+			} else {
+				// something else happened
+				panic(err)
+			}
 		}
-
-	}	
+	}
+	fmt.Println("Renaming done!")	
 }
 
-func (fileset FileSet) Add(file File) FileSet {
+// @TODO check that also the new names are unique from each other
+func (ifs ImgFileSet) checkFutureNamesUniqueness(directory string) error{
+	futureNames := make(map[string]string) // key is new filename, value is old filename
+
+	for key, files := range ifs.set {
+		for _, file := range files {
+			newfilename := file.TidyName("", key)
+			if _, err := os.Stat(directory + "/" + newfilename);
+			err == nil {
+				//file exist
+				return errors.New("nameUniqueness: file \"" + file.full_name + "\" was about to be renamed to \"" + newfilename + "\" but it already exist, script aborted")
+			} else if _, val :=futureNames[newfilename]; val {
+				return errors.New("nameUniqueness: file \"" + file.full_name + "\" has a future name collision with \"" + futureNames[newfilename] + "\" , script aborted")
+			} else if os.IsNotExist(err) {
+				futureNames[newfilename] = file.full_name
+				continue
+			} else {
+				// something else happened
+				panic(err)
+			}
+		}
+	}
+	return nil
+}
+
+func (fileset ImgFileSet) Add(file ImgFile) ImgFileSet {
 	if fileset.set == nil {
 		fmt.Println("fileset map empty, filling...") //@TODO logging
-		fileset.set = make(map[int][]File)
+		fileset.set = make(map[int][]ImgFile)
 	}
 	
 
@@ -73,7 +115,7 @@ func (fileset FileSet) Add(file File) FileSet {
 	return fileset
 }
 
-func (fileset FileSet) Print() {
+func (fileset ImgFileSet) Print() {
 	fmt.Println("Fileset tree:")
 	for common_name, file_slice := range fileset.set {
 		
@@ -87,11 +129,11 @@ func (fileset FileSet) Print() {
 
 
 
-/// class File
+/// class ImgFile
 
 // @TODO check that is not dir 
 
-type File struct {
+type ImgFile struct {
 	name string
 	prefix string
 	suffix int
@@ -100,11 +142,11 @@ type File struct {
 	generated_date string //time.Time
 }
 
-func (file File) Print() string {
+func (file ImgFile) Print() string {
 	return file.full_name
 }
 
-func Create_file_class(path os.DirEntry) File {
+func Create(path os.DirEntry) ImgFile {
 
 	fileinfo, err := path.Info()
 	if err != nil {
@@ -116,7 +158,7 @@ func Create_file_class(path os.DirEntry) File {
 	fprefix := fname[:strings.LastIndex(fname, ".")][:4]
 	fsuffix, _ := strconv.Atoi(fname[:strings.LastIndex(fname, ".")][4:])
 
-	newFile := File{ 
+	newFile := ImgFile{ 
 		name: fname[:strings.LastIndex(fname, ".")],
 		prefix: fprefix,
 		suffix: fsuffix,
@@ -131,7 +173,7 @@ func Create_file_class(path os.DirEntry) File {
 	return newFile
 }
 
-func (file File) TidyName(term string, idx int) string {
+func (file ImgFile) TidyName(term string, idx int) string {
 	return file.generated_date + "_" + term + strconv.Itoa(idx) + "." + file.extension
 }
 
