@@ -30,6 +30,8 @@ func init() {
 
 func main() {
 	dir := `/home/tonno/Desktop/20220516/golang_test`
+	// which_files := "656-1160"
+	// new_name := "testname"
 	flag.Parse()
 
 	fmt.Println("Flag prefix is ", *file_prefix)
@@ -51,7 +53,7 @@ func main() {
 	}
 
 	fileset.Print()
-	fileset.Rename(dir)
+	// fileset.Rename(dir, which_files, new_name)
 
 }
 

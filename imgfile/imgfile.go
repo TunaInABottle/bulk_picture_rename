@@ -13,39 +13,42 @@ import (
 	"github.com/rs/zerolog/log"
 	)
 
-
-var file_extensions [4]string = [4]string{".ORF", ".JPG", ".ORF.dop", ".JPG.dop"}
+var editor_extensions []string = []string{".ORF.dop", ".JPG.dop"}
+var file_extensions []string = append([]string{".ORF", ".JPG"}, editor_extensions...)
 
 func init() {
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339})
 }
 
-////////////////////////
-/// class ImgFileSet ///
-////////////////////////
+////////////////////////////////////
+///////// class ImgFileSet /////////
+////////////////////////////////////
 
 type ImgFileSet struct {
-	set map[int][]ImgFile
-	descr_idx map[string]map[string]int // date: [description1: idx1, descr2: idx2] 
+	//set map[int][]ImgFile
+	set 		 map[string][]ImgFile
+	date_idx_set map[string]map[string][]ImgFile
+	descr_idx	 map[string]map[string]int // date: [description1: idx1, descr2: idx2] 
+	idx_date 	 map[string]string					// imgidx1: date
 }
 
 // @TODO change name after renaming in ImgFileSet ?
-func (ifs ImgFileSet) Rename(directory string) {
+func (ifs ImgFileSet) Rename(directory string, interval string, label string) {
 	if err := ifs.checkFutureNamesUniqueness(directory);
 	err != nil {
 		log.Fatal().Err(err)
 	}
 
-	for key, files := range ifs.set {
-		for _, file := range files {
-			newfilename := file.TidyName("", key)
+	for _, files := range ifs.set {
+		for key, file := range files {
+			newfilename := file.TidyName(label, key)
 			if _, err := os.Stat(directory + "/" + newfilename);
 			err == nil {
 				//file exist
-				log.Warn().Str("file", newfilename).Msg("Rename: file name already exists")
+				log.Warn().Str("old_name", file.full_name).Str("new_name", newfilename).Msg("Rename: file name already exists")
 				continue
 			} else if os.IsNotExist(err) {
-				// our case, do the stuff
+				log.Debug().Str("dir", directory).Str("old_name", file.full_name).Str("new_name", newfilename).Msg("renaming file")
 				os.Rename(
 					directory + "/" + file.full_name, 
 					directory + "/" + newfilename)
@@ -64,7 +67,7 @@ func (ifs ImgFileSet) checkFutureNamesUniqueness(directory string) error{
 
 	for key, files := range ifs.set {
 		for _, file := range files {
-			newfilename := file.TidyName("", key)
+			newfilename := file.TidyName1("", key)
 			if _, err := os.Stat(directory + "/" + newfilename);
 			err == nil {
 				//file exist
@@ -82,36 +85,72 @@ func (ifs ImgFileSet) checkFutureNamesUniqueness(directory string) error{
 	}
 	return nil
 }
+
 func (fileset ImgFileSet) Add(file ImgFile) ImgFileSet {
-	if fileset.set == nil {
-		log.Debug().Msg("fileset map empty, creating...")
-		fileset.set = make(map[int][]ImgFile)
-	}
-	
 	if file.IsEmpty() {
 		log.Debug().Msg("Empty file, continuing")
 		return fileset
 	}
 
-	fileset.set[file.suffix] = append(fileset.set[file.suffix], file)
+	fileset = fileset.createMissingMaps(file)
+	
+	// add to date_idx_set map BEGIN
+	slice_to_append := fileset.date_idx_set[file.generated_date][strconv.Itoa(file.suffix)]
+	fileset.date_idx_set[file.generated_date][strconv.Itoa(file.suffix)] = append(slice_to_append, file)
+	// add to date_idx_set map END
+
+	// add to idx_date map BEGIN
+	doIt := true
+	for _, val := range editor_extensions {
+		if file.extension == val {
+			doIt = false
+		}
+	}
+	if doIt && fileset.idx_date[strconv.Itoa(file.suffix)] == "" {
+		fileset.idx_date[strconv.Itoa(file.suffix)] = file.generated_date
+	}
+	// add to idx_date map END
+
 	return fileset
 }
 func (fileset ImgFileSet) Print() {
 	fmt.Println("ImgFileSet tree:")
-	for common_name, file_slice := range fileset.set {
-		
-		fmt.Println(common_name)
-		for _, val := range file_slice {
-			fmt.Println("      ", val.Print())
+	for common_date, scd_map := range fileset.date_idx_set {
+		fmt.Println(common_date)
+		for common_idx, file_slice := range scd_map{
+			fmt.Println("  ", common_idx)
+			// fmt.Println("   ", scd_map)
+			for _, val := range file_slice {
+				fmt.Println("    ", val.Print())
+			}
 		}
-
 	}
+	fmt.Println(fileset.idx_date)
 }
 
-/////////////////////
-/// class ImgFile ///
-/////////////////////
 
+func (fileset ImgFileSet) createMissingMaps(file ImgFile) ImgFileSet {
+	// main date_idx_map
+	if fileset.date_idx_set == nil {
+		log.Debug().Msg("@TODO better text, fileset.date_idx_set empty, creating...")
+		fileset.date_idx_set = make(map[string]map[string][]ImgFile)
+	}
+	// nested date map in date_idx_set
+	if fileset.date_idx_set[file.generated_date] == nil {
+		log.Debug().Str("date", file.generated_date).Msg("fileset fileset.date_idx_set of date empty, creating...")
+		fileset.date_idx_set[file.generated_date] = make(map[string][]ImgFile)
+	}
+	// map in idx_date
+	if fileset.idx_date == nil {
+		log.Debug().Msg("@TODO better text, fileset map empty, creating...")
+		fileset.idx_date = make(map[string]string)
+	}
+
+	return fileset
+}
+/////////////////////////////////
+///////// class ImgFile /////////
+/////////////////////////////////
 
 type ImgFile struct {
 	name string
@@ -173,6 +212,10 @@ func Create(path os.DirEntry, prefix string) *ImgFile {
 	}
 
 	return &newFile
+}
+
+func (file ImgFile) TidyName1(term string, idx string) string {
+	return file.generated_date + "_" + term + idx + file.extension
 }
 
 func (file ImgFile) TidyName(term string, idx int) string {
