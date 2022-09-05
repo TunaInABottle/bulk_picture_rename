@@ -7,7 +7,7 @@ import (
 	"time"
 	"strconv"
 	"strings"
-	"errors"
+	// "errors"
 	
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -25,67 +25,38 @@ func init() {
 ////////////////////////////////////
 
 type ImgFileSet struct {
-	//set map[int][]ImgFile
-	set 		 map[string][]ImgFile
 	date_idx_set map[string]map[string][]ImgFile
-	descr_idx	 map[string]map[string]int // date: [description1: idx1, descr2: idx2] 
 	idx_date 	 map[string]string					// imgidx1: date
 }
+func (ifs ImgFileSet) Rename1(directory string, interval []int, label string) {
+	dateIdxMap := make(map[string]int)
 
-// @TODO change name after renaming in ImgFileSet ?
-func (ifs ImgFileSet) Rename(directory string, interval string, label string) {
-	if err := ifs.checkFutureNamesUniqueness(directory);
-	err != nil {
-		log.Fatal().Err(err)
-	}
+	for _, fileIdx := range interval {
+		strFileIds := strconv.Itoa(fileIdx)
+		fileDate := ifs.idx_date[strFileIds]
+		if fileDate != "" { // file exists
+			dateIdxMap[fileDate] += 1
+			fileNameIdx := dateIdxMap[fileDate]
+			files := ifs.date_idx_set[fileDate][strFileIds] 
+			for _, file := range files {
+				newFileName := file.TidyName(label, fileNameIdx)
 
-	for _, files := range ifs.set {
-		for key, file := range files {
-			newfilename := file.TidyName(label, key)
-			if _, err := os.Stat(directory + "/" + newfilename);
-			err == nil {
-				//file exist
-				log.Warn().Str("old_name", file.full_name).Str("new_name", newfilename).Msg("Rename: file name already exists")
-				continue
-			} else if os.IsNotExist(err) {
-				log.Debug().Str("dir", directory).Str("old_name", file.full_name).Str("new_name", newfilename).Msg("renaming file")
-				os.Rename(
-					directory + "/" + file.full_name, 
-					directory + "/" + newfilename)
-			} else {
-				// something else happened
-				panic(err)
+				if _, err := os.Stat(directory + "/" + newFileName);
+				err == nil {
+					log.Fatal().Str("oldName", file.full_name).Str("newName", newFileName).Msg("file already existing")
+				} else if os.IsNotExist(err) {
+					log.Info().Str("dir", directory).Str("oldName", file.full_name).Str("newName", newFileName).Msg("renaming file")
+					// os.Rename(
+					// 	directory + "/" + file.full_name, 
+					// 	directory + "/" + newfilename)
+				} else {
+					// something else happened
+					panic(err)
+				}
 			}
 		}
 	}
-	log.Info().Msg("Renaming done!")	
 }
-
-// @TODO check that also the new names are unique from each other
-func (ifs ImgFileSet) checkFutureNamesUniqueness(directory string) error{
-	futureNames := make(map[string]string) // key is new filename, value is old filename
-
-	for key, files := range ifs.set {
-		for _, file := range files {
-			newfilename := file.TidyName1("", key)
-			if _, err := os.Stat(directory + "/" + newfilename);
-			err == nil {
-				//file exist
-				return errors.New("nameUniqueness: file \"" + file.full_name + "\" was about to be renamed to \"" + newfilename + "\" but it already exist, script aborted")
-			} else if _, val :=futureNames[newfilename]; val {
-				return errors.New("nameUniqueness: file \"" + file.full_name + "\" has a future name collision with \"" + futureNames[newfilename] + "\" , script aborted")
-			} else if os.IsNotExist(err) {
-				futureNames[newfilename] = file.full_name
-				continue
-			} else {
-				// something else happened
-				panic(err)
-			}
-		}
-	}
-	return nil
-}
-
 func (fileset ImgFileSet) Add(file ImgFile) ImgFileSet {
 	if file.IsEmpty() {
 		log.Debug().Msg("Empty file, continuing")
@@ -110,7 +81,6 @@ func (fileset ImgFileSet) Add(file ImgFile) ImgFileSet {
 		fileset.idx_date[strconv.Itoa(file.suffix)] = file.generated_date
 	}
 	// add to idx_date map END
-
 	return fileset
 }
 func (fileset ImgFileSet) Print() {
@@ -127,8 +97,6 @@ func (fileset ImgFileSet) Print() {
 	}
 	fmt.Println(fileset.idx_date)
 }
-
-
 func (fileset ImgFileSet) createMissingMaps(file ImgFile) ImgFileSet {
 	// main date_idx_map
 	if fileset.date_idx_set == nil {
