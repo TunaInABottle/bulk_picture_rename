@@ -7,6 +7,7 @@ import (
 	"time"
 	"strconv"
 	"strings"
+	"regexp"
 	// "errors"
 	
 	"github.com/rs/zerolog"
@@ -14,7 +15,7 @@ import (
 	)
 
 var editor_extensions []string = []string{".ORF.dop", ".JPG.dop"}
-var file_extensions []string = append([]string{".ORF", ".JPG"}, editor_extensions...)
+var allowedExtensions []string = append([]string{".ORF", ".JPG"}, editor_extensions...)
 
 func init() {
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339})
@@ -28,7 +29,7 @@ type ImgFileSet struct {
 	date_idx_set map[string]map[string][]ImgFile
 	idx_date 	 map[string]string					// imgidx1: date
 }
-func (ifs ImgFileSet) Rename1(directory string, interval []int, label string) {
+func (ifs ImgFileSet) Rename(directory string, interval []int, label string) {
 	dateIdxMap := make(map[string]int)
 
 	for _, fileIdx := range interval {
@@ -48,7 +49,7 @@ func (ifs ImgFileSet) Rename1(directory string, interval []int, label string) {
 					log.Info().Str("dir", directory).Str("oldName", file.full_name).Str("newName", newFileName).Msg("renaming file")
 					// os.Rename(
 					// 	directory + "/" + file.full_name, 
-					// 	directory + "/" + newfilename)
+					// 	directory + "/" + newFileName)
 				} else {
 					// something else happened
 					panic(err)
@@ -58,6 +59,9 @@ func (ifs ImgFileSet) Rename1(directory string, interval []int, label string) {
 	}
 }
 func (fileset ImgFileSet) Add(file ImgFile) ImgFileSet {
+
+	// @TODO check file validity in its entirety first!
+
 	if file.IsEmpty() {
 		log.Debug().Msg("Empty file, continuing")
 		return fileset
@@ -65,22 +69,29 @@ func (fileset ImgFileSet) Add(file ImgFile) ImgFileSet {
 
 	fileset = fileset.createMissingMaps(file)
 	
-	// add to date_idx_set map BEGIN
-	slice_to_append := fileset.date_idx_set[file.generated_date][strconv.Itoa(file.suffix)]
-	fileset.date_idx_set[file.generated_date][strconv.Itoa(file.suffix)] = append(slice_to_append, file)
-	// add to date_idx_set map END
-
 	// add to idx_date map BEGIN
-	doIt := true
+	editorFile := false
 	for _, val := range editor_extensions {
 		if file.extension == val {
-			doIt = false
+			editorFile = true
 		}
 	}
-	if doIt && fileset.idx_date[strconv.Itoa(file.suffix)] == "" {
-		fileset.idx_date[strconv.Itoa(file.suffix)] = file.generated_date
+	if !editorFile && fileset.idx_date[strconv.Itoa(file.enum)] == "" {
+		fileset.idx_date[strconv.Itoa(file.enum)] = file.generated_date
 	}
 	// add to idx_date map END
+
+	// add to date_idx_set map BEGIN
+	var dateKey string
+	if editorFile {
+		dateKey = "0" //ASSUMPTION: no file can have index 0
+	} else {
+		dateKey = file.generated_date
+	}
+	slice_to_append := fileset.date_idx_set[dateKey][strconv.Itoa(file.enum)]
+	fileset.date_idx_set[dateKey][strconv.Itoa(file.enum)] = append(slice_to_append, file)
+	// add to date_idx_set map END
+
 	return fileset
 }
 func (fileset ImgFileSet) Print() {
@@ -88,92 +99,157 @@ func (fileset ImgFileSet) Print() {
 	for common_date, scd_map := range fileset.date_idx_set {
 		fmt.Println(common_date)
 		for common_idx, file_slice := range scd_map{
-			fmt.Println("  ", common_idx)
+			fmt.Println(" ↳", common_idx)
 			// fmt.Println("   ", scd_map)
 			for _, val := range file_slice {
-				fmt.Println("    ", val.Print())
+				fmt.Println(" | ↳", val.Print())
 			}
 		}
 	}
-	fmt.Println(fileset.idx_date)
+
+	fmt.Println("\nthe other map\n", fileset.idx_date)
 }
 func (fileset ImgFileSet) createMissingMaps(file ImgFile) ImgFileSet {
 	// main date_idx_map
 	if fileset.date_idx_set == nil {
-		log.Debug().Msg("@TODO better text, fileset.date_idx_set empty, creating...")
+		log.Debug().Str("func", "createMissingMaps").Msg("fileset.date_idx_set empty, creating...")
 		fileset.date_idx_set = make(map[string]map[string][]ImgFile)
 	}
 	// nested date map in date_idx_set
 	if fileset.date_idx_set[file.generated_date] == nil {
-		log.Debug().Str("date", file.generated_date).Msg("fileset fileset.date_idx_set of date empty, creating...")
+		log.Debug().Str("func", "createMissingMaps").Str("date", file.generated_date).Msg("fileset fileset.date_idx_set of date empty, creating...")
 		fileset.date_idx_set[file.generated_date] = make(map[string][]ImgFile)
+	}
+	// nested date 0 map in date_idx_set
+	if fileset.date_idx_set["0"] == nil {
+		log.Debug().Str("date", "0").Msg("fileset fileset.date_idx_set of date empty, creating...")
+		fileset.date_idx_set["0"] = make(map[string][]ImgFile)
 	}
 	// map in idx_date
 	if fileset.idx_date == nil {
-		log.Debug().Msg("@TODO better text, fileset map empty, creating...")
+		log.Debug().Str("func", "createMissingMaps").Msg("idx_date Smap empty, creating...")
 		fileset.idx_date = make(map[string]string)
 	}
 
 	return fileset
 }
+
+// put editor files in the same map of the original file
+func (fileset *ImgFileSet) RecoverEditorFiles() {
+	recoveryMaps := fileset.date_idx_set["0"]
+
+	if recoveryMaps != nil {
+		for _, editorFileSlice := range recoveryMaps {
+			for _, editorFile := range editorFileSlice {
+				fileIndex := strconv.Itoa(editorFile.enum)
+				originalFileDate := fileset.idx_date[fileIndex]
+				if originalFileDate != "" {
+					log.Debug().Str("file", editorFile.full_name).Str("orgDate", originalFileDate).Msg("Adjusted editor file date successfully")
+					editorFile.generated_date = originalFileDate
+					fileset.date_idx_set[originalFileDate][fileIndex] = append(fileset.date_idx_set[originalFileDate][fileIndex], editorFile)
+				} else {
+					log.Debug().Str("file", editorFile.full_name).Str("orgDate", originalFileDate).Msg("Adjusting editor file date failed")
+				}
+			}
+		}
+		delete(fileset.date_idx_set, "0")
+	}
+}
+
+
+
+
+
 /////////////////////////////////
 ///////// class ImgFile /////////
 /////////////////////////////////
 
+// example of expected filenames:
+// TUNA0707.JPG
+// 20200906_coding_1.JPG
 type ImgFile struct {
-	name string
-	prefix string
-	suffix int
-	extension string
-	full_name string
-	generated_date string //time.Time
+	labels string			// the labels in the file name eg. landscape_lake
+	prefix string			// the first component of a filename
+	enum int				// progressive number written in the filename
+	extension string		// extension of the file
+	full_name string		// full file name
+	generated_date string	// date in which the picture has been taken
 }
 
 func (file ImgFile) Print() string {
 	return file.full_name
 }
 
-func Create(path os.DirEntry, prefix string) *ImgFile {
-	fileinfo, err := path.Info()
+func New(path os.DirEntry, prefix string) *ImgFile {
+	fileinfo, err := path.Info() // os.FileInfo type
 
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-
 	fname := fileinfo.Name()
-
-	if path.IsDir() {
-		log.Warn().Str("name", fname).Msg("directory detected, continuing")
-		return new(ImgFile)
-	}
-
+	// if path.IsDir() {
+	// 	log.Warn().Str("name", fname).Msg("directory detected, skipped")
+	// 	return new(ImgFile)
+	// }
 	var fExtension string
-	for _, val := range file_extensions {
+	for _, val := range allowedExtensions {
 		if strings.HasSuffix(fname, val) {
 			fExtension = val
 		}
 	}
+	return newImgFile(fileinfo, fname, fExtension, prefix)
+}
+
+
+func newImgFile(fileinfo os.FileInfo, fname string, fExtension string, prefix string) (*ImgFile) {
 	if fExtension == "" {
-		log.Warn().Str("file", fname).Msg("unexpected file extension, continuing")
+		log.Warn().Str("file", fname).Msg("unexpected file extension, skipped")
 		return new(ImgFile)
 	}
-
 
 	// skip if the file does not have the expected prefix
-	if !strings.HasPrefix(fname, prefix) {
-		log.Warn().Str("file", fname).Msg("prefix different from expected, continuing")
-		return new(ImgFile)
+	if strings.HasPrefix(fname, prefix) {
+		return newWithPrefix(fileinfo, fname, fExtension, prefix)
+	} 
+	if match, err := regexp.Match("^\\d{8}_", []byte(fname)); //string starts with 8 numbers
+	err != nil {
+		panic(err)
+	} else if match {
+		return newWithDate(fileinfo, fname, fExtension)
 	}
+	log.Warn().Str("file", fname).Msg("something went wrong with the creation")
+	return new(ImgFile)
+}
 
+// expect string in a format eg. "20220102_landscape_1.JPEG"
+func newWithDate(fileinfo os.FileInfo, fname string, fExtension string) (*ImgFile) {
+	splitString := strings.Split(fname, "_") // [20220102, landscape, 1.JPEG]
+	tempEnum := splitString[len(splitString)-1]
+	fenum, _ := strconv.Atoi(tempEnum[:strings.LastIndex(tempEnum, ".")]) // img index
+	label := strings.Join(splitString[1:len(splitString)-2], "_") //join labels in the middle
+
+	newFile := ImgFile{ 
+		labels: label, //here it is the label
+		prefix: splitString[0],
+		enum: fenum, //
+		extension: fExtension,
+		full_name: fname,
+		generated_date: unix_filetime(fileinfo),
+	}
+	log.Debug().Str("func", "newWithPrefix").Msg("creating file from date " + newFile.labels + newFile.prefix + strconv.Itoa(newFile.enum) + newFile.extension + newFile.full_name + newFile.generated_date)
+	return &newFile
+}
+
+func newWithPrefix(fileinfo os.FileInfo, fname string, fExtension string, prefix string) (*ImgFile) {
 	temp_str := strings.TrimPrefix(fname, prefix)
-	fsuffix, _ := strconv.Atoi(strings.TrimSuffix(temp_str, fExtension))
+	fenum, _ := strconv.Atoi(strings.TrimSuffix(temp_str, fExtension))
 
 
 	newFile := ImgFile{ 
-		name: fname[:strings.LastIndex(fname, ".")],
+		//labels: fname[:strings.LastIndex(fname, ".")],
 		prefix: prefix,
-		suffix: fsuffix,
+		enum: fenum,
 		extension: fExtension,
 		full_name: fname,
 		generated_date: unix_filetime(fileinfo),
@@ -182,16 +258,12 @@ func Create(path os.DirEntry, prefix string) *ImgFile {
 	return &newFile
 }
 
-func (file ImgFile) TidyName1(term string, idx string) string {
-	return file.generated_date + "_" + term + idx + file.extension
-}
-
 func (file ImgFile) TidyName(term string, idx int) string {
-	return file.generated_date + "_" + term + strconv.Itoa(idx) + file.extension
+	return file.generated_date + "_" + term + "_" + strconv.Itoa(idx) + file.extension
 }
 
 func (file ImgFile) IsEmpty() bool {
-	return file.name == "" && file.extension == ""
+	return file.labels == "" && file.extension == "" && file.prefix == ""
 }
 
 func unix_filetime(path os.FileInfo) string {
@@ -205,6 +277,6 @@ func unix_filetime(path os.FileInfo) string {
 	// fmt.Println( unix_time )
 	// fmt.Println( unix_time.Format("20060102") ) //.Format("2006-01-02")
 
-	return unix_time.Format("20060115")
+	return unix_time.Format("20060102") //yyyymmdd
 
 }

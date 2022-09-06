@@ -23,37 +23,33 @@ func init() {
 	dir = flag.String("dir", "", "folder containing the pictures")
 	label = flag.String("label", "", "name of the new files")
 	file_prefix = flag.String("prefix", "TUNA", "prefix of the files to be renamed")
-	intervalStr = flag.String("interval", "656-658,1159-1160", "the range of progressive index files that will be renamed")
+	intervalStr = flag.String("interval", "656-658,1160-1690", "the range of progressive index files that will be renamed")
 }
 
 func main() {
-	// dir := `/home/tonno/Desktop/20220516/golang_test`
-	// which_files := "656-658,1159-1160"
-	// new_name := "testname"
 	flag.Parse()
-
-	fmt.Println("Flag prefix is ", *file_prefix)
 
 	files, err := os.ReadDir(*dir)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-
 	var fileset imgfile.ImgFileSet
 
 	for _, fi := range files {
-		cur_file := imgfile.Create(fi, *file_prefix)
+		cur_file := imgfile.New(fi, *file_prefix)
 
 		if !cur_file.IsEmpty() {
 			fileset = fileset.Add(*cur_file)
 		}
 	}
+	//fileset = fileset.RecoverEditorFiles()
+	fileset.RecoverEditorFiles()
+	fileset.Print()
 
 	interval := ProcessSeq(*intervalStr)
 
-	fileset.Print()
-	fileset.Rename1(*dir, interval, *label)
+	fileset.Rename(*dir, interval, *label)
 
 }
 
@@ -68,7 +64,6 @@ func ProcessSeq(seq string) []int {
 	var full_seq []int
 	
 	for _, val := range strings.Split(seq, ",") {
-		fmt.Println(val)
 		match, err := regexp.Match("[^\\d\\-]|^-|.*-.*-", []byte(val))
 		if err != nil {
 			panic(err)
@@ -79,7 +74,7 @@ func ProcessSeq(seq string) []int {
 				lower, _ := strconv.Atoi(splitted[0])
 				higher, _ := strconv.Atoi(splitted[1])
 				if lower > higher {
-					panic("the lower bound is set higher than the higher bound!")
+					panic("Lower bound is set higher than higher bound!")
 				}
 				for lower <= higher {
 					full_seq = append(full_seq, lower)
@@ -93,10 +88,3 @@ func ProcessSeq(seq string) []int {
 	}
 	return full_seq
 }
-	for _, value := range sl {
-	   if value == name {
-		  return true
-	   }
-	}
-	return false
- }
