@@ -1,6 +1,7 @@
 package imgfile
 
 import (
+
 	"os"
 	"fmt"
 	"syscall"
@@ -14,27 +15,74 @@ import (
 	"github.com/rs/zerolog/log"
 	)
 
+
 var editor_extensions []string = []string{".ORF.dop", ".JPG.dop"}
 var allowedExtensions []string = append([]string{".ORF", ".JPG"}, editor_extensions...)
+const allow_rename = false //disabled during debugging
 
 func init() {
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339})
 }
 
-////////////////////////////////////
-///////// class ImgFileSet /////////
-////////////////////////////////////
+// TODO interface to decouple ImgFile and a future struct
+
+///////////////////////////////
+/////////  ImgFileSet /////////
+///////////////////////////////
 
 type ImgFileSet struct {
-	date_idx_set map[string]map[string][]ImgFile
-	idx_date 	 map[string]string					// imgidx1: date
+	date_idx_set 	map[string]map[string][]ImgFile
+	idx_date 	 	map[string]string					// imgidx1: date
+	dLI				dateLabelIdx						// Date > Label > Idx
 }
+
+//@TODO put in Add the following
+// ifs.dLI.SetIdx(ymd, label, 42) 
+// handle difference between TUNA and pre-named
+
+// suppose all maps are up-to-date
+func (ifs ImgFileSet) Rename1(directory string, interval []int, label string) {
+	for _, fileIdx := range interval { // iterate over [605, 606, 607, 625] (TUNA files)
+		strFileIdx := strconv.Itoa(fileIdx)
+		fileDate := ifs.idx_date[strFileIdx]
+		ymd := ymdDate{fileDate}
+
+		if (ymd != ymdDate{}) { // date exists in map
+			ifs.dLI.increaseIdx(ymd, label)
+			labelIdx := ifs.dLI.getIdx(ymd, label)
+			log.Debug().Int("idx_label", labelIdx).Send()
+			// files := ifs.date_idx_set[fileDate][strFileIdx] 
+			// for _, file := range files {
+			// 	newFileName := file.TidyName(label, labelIdx)
+
+			// 	if _, err := os.Stat(directory + "/" + newFileName);
+			// 	err == nil {
+			// 		log.Fatal().Str("oldName", file.full_name).Str("newName", newFileName).Msg("file already existing")
+			// 	} else if os.IsNotExist(err) {
+			// 		log.Info().Str("dir", directory).Str("oldName", file.full_name).Str("newName", newFileName).Msg("renaming file")
+			// 		if allow_rename {
+			// 			os.Rename(
+			// 				directory + "/" + file.full_name, 
+			// 				directory + "/" + newFileName)
+			// 		}
+			// 	} else {
+			// 		// something else happened
+			// 		panic(err)
+			// 	}
+			// }
+		}
+	}
+}
+
+// suppose all maps are up-to-date
 func (ifs ImgFileSet) Rename(directory string, interval []int, label string) {
 	dateIdxMap := make(map[string]int)
 
 	for _, fileIdx := range interval {
 		strFileIds := strconv.Itoa(fileIdx)
 		fileDate := ifs.idx_date[strFileIds]
+
+		//ymd := ymdDate{fileDate}
 		if fileDate != "" { // file exists
 			dateIdxMap[fileDate] += 1
 			fileNameIdx := dateIdxMap[fileDate]
@@ -47,9 +95,11 @@ func (ifs ImgFileSet) Rename(directory string, interval []int, label string) {
 					log.Fatal().Str("oldName", file.full_name).Str("newName", newFileName).Msg("file already existing")
 				} else if os.IsNotExist(err) {
 					log.Info().Str("dir", directory).Str("oldName", file.full_name).Str("newName", newFileName).Msg("renaming file")
-					// os.Rename(
-					// 	directory + "/" + file.full_name, 
-					// 	directory + "/" + newFileName)
+					if allow_rename {
+						os.Rename(
+							directory + "/" + file.full_name, 
+							directory + "/" + newFileName)
+					}
 				} else {
 					// something else happened
 					panic(err)
@@ -58,16 +108,17 @@ func (ifs ImgFileSet) Rename(directory string, interval []int, label string) {
 		}
 	}
 }
-func (fileset ImgFileSet) Add(file ImgFile) ImgFileSet {
+
+func (fileset *ImgFileSet) Add(file ImgFile) {
 
 	// @TODO check file validity in its entirety first!
 
 	if file.IsEmpty() {
 		log.Debug().Msg("Empty file, continuing")
-		return fileset
+		//return fileset
 	}
 
-	fileset = fileset.createMissingMaps(file)
+	fileset.createMissingMaps(file)
 	
 	// add to idx_date map BEGIN
 	editorFile := false
@@ -91,8 +142,6 @@ func (fileset ImgFileSet) Add(file ImgFile) ImgFileSet {
 	slice_to_append := fileset.date_idx_set[dateKey][strconv.Itoa(file.enum)]
 	fileset.date_idx_set[dateKey][strconv.Itoa(file.enum)] = append(slice_to_append, file)
 	// add to date_idx_set map END
-
-	return fileset
 }
 func (fileset ImgFileSet) Print() {
 	fmt.Println("ImgFileSet tree:")
@@ -109,7 +158,7 @@ func (fileset ImgFileSet) Print() {
 
 	fmt.Println("\nthe other map\n", fileset.idx_date)
 }
-func (fileset ImgFileSet) createMissingMaps(file ImgFile) ImgFileSet {
+func (fileset *ImgFileSet) createMissingMaps(file ImgFile) {
 	// main date_idx_map
 	if fileset.date_idx_set == nil {
 		log.Debug().Str("func", "createMissingMaps").Msg("fileset.date_idx_set empty, creating...")
@@ -130,10 +179,7 @@ func (fileset ImgFileSet) createMissingMaps(file ImgFile) ImgFileSet {
 		log.Debug().Str("func", "createMissingMaps").Msg("idx_date Smap empty, creating...")
 		fileset.idx_date = make(map[string]string)
 	}
-
-	return fileset
 }
-
 // put editor files in the same map of the original file
 func (fileset *ImgFileSet) RecoverEditorFiles() {
 	recoveryMaps := fileset.date_idx_set["0"]
@@ -158,11 +204,57 @@ func (fileset *ImgFileSet) RecoverEditorFiles() {
 
 
 
+////////////////////////////////
+///////// dateLabelIdx /////////
+////////////////////////////////
+//helps to find the existing indexes of labels
+
+type dateLabelIdx struct {
+	mapDLI map[ymdDate]map[string]int 
+}
+
+func (dli *dateLabelIdx) createMissingMaps(dateKey ymdDate) {
+	if dli.mapDLI == nil {
+		dli.mapDLI = make(map[ymdDate]map[string]int)
+	}
+	if dli.mapDLI[dateKey] == nil {
+		dli.mapDLI[dateKey] = make(map[string]int)
+	}
+}
+func (dli *dateLabelIdx) SetIdx(dateKey ymdDate, label string, val int) {
+	dli.createMissingMaps(dateKey)
+	log.Debug().Str("date", dateKey.ymd).Str("label", label).Int("val", val).Str("func", "dateLabelIdx").Msg("setting value")
+	dli.mapDLI[dateKey][label] = max(dli.mapDLI[dateKey][label], val)
+}
+func (dli *dateLabelIdx) increaseIdx(dateKey ymdDate, label string) {
+	dli.createMissingMaps(dateKey)
+	// @TODO how to distinguish TUNA from already named?
+	dli.mapDLI[dateKey][label] += 1
+}
+func (dli dateLabelIdx) getIdx(dateKey ymdDate, label string) int {
+	dli.createMissingMaps(dateKey)
+	// @TODO what if 0 (not initialised)?
+	log.Debug().Str("date", dateKey.ymd).Str("label", label).Str("func", "dateLabelIdx").Msg("getting value")
+	return dli.mapDLI[dateKey][label]
+}
 
 
-/////////////////////////////////
-///////// class ImgFile /////////
-/////////////////////////////////
+
+
+////////////////////////////
+///////// ImgFiler /////////
+////////////////////////////
+
+type ImgFiler interface {
+	Print() string //@TODO rename String()
+	//New(os.DirEntry, string) *T
+	IsEmpty() bool
+	TidyName(string, int) string
+}
+
+///////////////////////////
+///////// ImgFile /////////
+///////////////////////////
 
 // example of expected filenames:
 // TUNA0707.JPG
@@ -188,10 +280,7 @@ func New(path os.DirEntry, prefix string) *ImgFile {
 		os.Exit(1)
 	}
 	fname := fileinfo.Name()
-	// if path.IsDir() {
-	// 	log.Warn().Str("name", fname).Msg("directory detected, skipped")
-	// 	return new(ImgFile)
-	// }
+	
 	var fExtension string
 	for _, val := range allowedExtensions {
 		if strings.HasSuffix(fname, val) {
@@ -261,10 +350,25 @@ func newWithPrefix(fileinfo os.FileInfo, fname string, fExtension string, prefix
 func (file ImgFile) TidyName(term string, idx int) string {
 	return file.generated_date + "_" + term + "_" + strconv.Itoa(idx) + file.extension
 }
-
 func (file ImgFile) IsEmpty() bool {
 	return file.labels == "" && file.extension == "" && file.prefix == ""
 }
+
+///////////////////////////
+///////// ymdDate /////////
+///////////////////////////
+
+///////////////////////////
+///////// ymdDate /////////
+///////////////////////////
+
+type ymdDate struct {
+	ymd string
+}
+
+////////////////////////////
+////// util functions //////
+////////////////////////////
 
 func unix_filetime(path os.FileInfo) string {
 	// source: https://developpaper.com/getting-access-creation-modification-time-of-files-on-linux-using-golang/ //
@@ -279,4 +383,11 @@ func unix_filetime(path os.FileInfo) string {
 
 	return unix_time.Format("20060102") //yyyymmdd
 
+}
+
+func max(x, y int) int {
+	if x > y {
+		return x
+	}
+	return y
 }

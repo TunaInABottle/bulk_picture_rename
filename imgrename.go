@@ -23,7 +23,7 @@ func init() {
 	dir = flag.String("dir", "", "folder containing the pictures")
 	label = flag.String("label", "", "name of the new files")
 	file_prefix = flag.String("prefix", "TUNA", "prefix of the files to be renamed")
-	intervalStr = flag.String("interval", "656-658,1160-1690", "the range of progressive index files that will be renamed")
+	intervalStr = flag.String("interval", "655,657-659,1640-1645", "the range of progressive index files that will be renamed")
 }
 
 func main() {
@@ -40,7 +40,7 @@ func main() {
 		cur_file := imgfile.New(fi, *file_prefix)
 
 		if !cur_file.IsEmpty() {
-			fileset = fileset.Add(*cur_file)
+			fileset.Add(*cur_file)
 		}
 	}
 	//fileset = fileset.RecoverEditorFiles()
@@ -49,11 +49,9 @@ func main() {
 
 	interval := ProcessSeq(*intervalStr)
 
-	fileset.Rename(*dir, interval, *label)
+	fileset.Rename1(*dir, interval, *label)
 
 }
-
-
 
 //////////////////////////////
 //////////////////////////////
