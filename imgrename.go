@@ -38,7 +38,6 @@ func main() {
 
 	for _, fi := range files {
 		cur_file := imgfile.New(fi, *file_prefix)
-
 		if !cur_file.IsEmpty() {
 			fileset.Add(*cur_file)
 		}
@@ -49,7 +48,6 @@ func main() {
 	interval := ProcessSeq(*intervalStr)
 
 	fileset.Rename(*dir, interval, *label)
-
 }
 
 //////////////////////////////

@@ -13,41 +13,25 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+//////////////////////////////////
+///////// ImgFileFactory /////////
+//////////////////////////////////
+
+func getImgFile() (*ImgFiler, error) {
+	return nil, nil
+}
+
+
 ////////////////////////////
 ///////// ImgFiler /////////
 ////////////////////////////
 
 type ImgFiler interface {
-	String() string //@TODO rename String()
+	String() string
 	//New(os.DirEntry, string) *T
 	IsEmpty() bool
 	TidyName(string, int) string
 }
-
-//////////////////////////////////
-///////// FactoryAttempt /////////
-//////////////////////////////////
-
-type ImgFileFactory func() *ImgFiler
-
-func CreateImgFile(fileinfo os.FileInfo, fname string, fExtension string, prefix string) (ImgFiler) {
-	// newWithPrefix code
-	
-		temp_str := strings.TrimPrefix(fname, prefix)
-		fenum, _ := strconv.Atoi(strings.TrimSuffix(temp_str, fExtension))
-	
-	
-		newFile := ImgFile{ 
-			//labels: fname[:strings.LastIndex(fname, ".")],
-			prefix: prefix,
-			enum: fenum,
-			extension: fExtension,
-			full_name: fname,
-			generated_date: unix_filetime(fileinfo),
-		}	
-		return &newFile
-}
-
 
 ///////////////////////////
 ///////// ImgFile /////////
@@ -57,13 +41,13 @@ func CreateImgFile(fileinfo os.FileInfo, fname string, fExtension string, prefix
 // TUNA0707.JPG
 // 20200906_coding_1.JPG
 type ImgFile struct {
-	labels string			// the labels in the file name eg. landscape_lake
+	//label string			// the labels in the file name eg. landscape_lake
 	prefix string			// the first component of a filename
 	enum int				// progressive number written in the filename
 	extension string		// extension of the file
 	full_name string		// full file name
 	generated_date string	// date in which the picture has been taken
-	isLabeled bool			// tells if the image has been previously labeled
+	//isLabeled bool			// tells if the image has been previously labeled
 }
 
 func (file ImgFile) String() string {
@@ -113,18 +97,19 @@ func newWithDate(fileinfo os.FileInfo, fname string, fExtension string) (*ImgFil
 	splitString := strings.Split(fname, "_") // [20220102, landscape, 1.JPEG]
 	tempEnum := splitString[len(splitString)-1]
 	fenum, _ := strconv.Atoi(tempEnum[:strings.LastIndex(tempEnum, ".")]) // img index
-	label := strings.Join(splitString[1:len(splitString)-2], "_") //join labels in the middle
+	//label := strings.Join(splitString[1:len(splitString)-2], "_") //join labels in the middle
 
 	newFile := ImgFile{ 
-		labels: label, //here it is the label
+		// labels: label
 		prefix: splitString[0],
-		enum: fenum, //
+		enum: fenum,
 		extension: fExtension,
 		full_name: fname,
 		generated_date: unix_filetime(fileinfo),
-		isLabeled: true,
+		// isLabeled: true,
 	}
-	log.Debug().Str("func", "newWithPrefix").Msg("creating file from date " + newFile.labels + newFile.prefix + strconv.Itoa(newFile.enum) + newFile.extension + newFile.full_name + newFile.generated_date)
+	// log.Debug().Str("func", "newWithPrefix").Msg("creating file from date " + newFile.labels + newFile.prefix + strconv.Itoa(newFile.enum) + newFile.extension + newFile.full_name + newFile.generated_date)
+	log.Debug().Str("func", "newWithPrefix").Msg("creating file from date " + newFile.prefix + strconv.Itoa(newFile.enum) + newFile.extension + newFile.full_name + newFile.generated_date)
 	return &newFile
 }
 
@@ -149,7 +134,7 @@ func (file ImgFile) TidyName(term string, idx int) string {
 	return file.generated_date + "_" + term + "_" + strconv.Itoa(idx) + file.extension
 }
 func (file ImgFile) IsEmpty() bool {
-	return file.labels == "" && file.extension == "" && file.prefix == ""
+	return file.extension == "" && file.prefix == "" && file.enum == 0 //&& file.labels == ""
 }
 
 ////////////////////////////

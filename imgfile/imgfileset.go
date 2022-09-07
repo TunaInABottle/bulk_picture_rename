@@ -32,7 +32,7 @@ func init() {
 ///////////////////////////////
 
 type ImgFileSet struct {
-	dIS_cl			dateIdxSet 							// Date > ImgIdx > setImg
+	dIS				dateIdxSet 							// Date > ImgIdx > setImg
 	dLI				dateLabelIdx						// Date > Label > Idx
 	idx_date 	 	map[string]string					// imgidx1 > date
 }
@@ -51,7 +51,7 @@ func (ifs ImgFileSet) Rename(directory string, interval []int, label string) {
 							  //@TODO is check good? (infering underlying type)
 			ifs.dLI.increaseIdx(fileDate, label)
 			labelIdx := ifs.dLI.getIdx(fileDate, label)
-			files := ifs.dIS_cl.GetImgFiles(fileDate, strFileIdx)
+			files := ifs.dIS.GetImgFiles(fileDate, strFileIdx)
 
 			for _, file := range files {
 				newFileName := file.TidyName(label, labelIdx)
@@ -100,7 +100,7 @@ func (fileset *ImgFileSet) Add(file ImgFile) {
 	}
 	// add to idx_date map END
 
-	// add to dIS_cl map BEGIN
+	// add to dIS map BEGIN
 	var dateKey ymdDate
 	if editorFile {
 		dateKey = impDate
@@ -108,20 +108,20 @@ func (fileset *ImgFileSet) Add(file ImgFile) {
 		dateKey = ymdDate(file.generated_date)
 		log.Debug().Str("date", file.generated_date).Str("date_obj", dateKey.String()).Send()
 	}
-	fileset.dIS_cl.Add(dateKey, strconv.Itoa(file.enum), file )
+	fileset.dIS.Add(dateKey, strconv.Itoa(file.enum), file )
 	// add to date_idx_set map END
 }
 
 func (fileset ImgFileSet) String() {
 	fmt.Println("ImgFileSet tree in Date > Index > ImgSet class:")
-	fmt.Println(fileset.dIS_cl)
+	fmt.Println(fileset.dIS)
 	fmt.Println("\nMap Index > Date\n", fileset.idx_date)
 }
 
 // put editor files in the same map of the original file
 // change with change on editor file
 func (fileset *ImgFileSet) RecoverEditorFiles() {
-	recoveryMaps := fileset.dIS_cl.GetIndexMaps(impDate)
+	recoveryMaps := fileset.dIS.GetIndexMaps(impDate)
 
 	if recoveryMaps != nil {
 		for _, editorFileSlice := range recoveryMaps {
@@ -130,14 +130,14 @@ func (fileset *ImgFileSet) RecoverEditorFiles() {
 				originalFileDate := fileset.idx_date[fileIndex]
 				if originalFileDate != "" {
 					editorFile.generated_date = originalFileDate
-					fileset.dIS_cl.Add(ymdDate(originalFileDate), fileIndex, editorFile)
+					fileset.dIS.Add(ymdDate(originalFileDate), fileIndex, editorFile)
 					log.Debug().Str("file", editorFile.full_name).Str("orgDate", originalFileDate).Msg("Adjusted editor file date successfully")
 				} else {
 					log.Debug().Str("file", editorFile.full_name).Str("orgDate", originalFileDate).Msg("Adjusting editor file date failed")
 				}
 			}
 		}
-		fileset.dIS_cl.deleteDate(impDate)
+		fileset.dIS.deleteDate(impDate)
 	}
 }
 
