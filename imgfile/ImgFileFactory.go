@@ -3,23 +3,65 @@ package imgfile
 import (
 	"os"
 	"fmt"
-	"syscall"
-	"time"
 	"strconv"
 	"strings"
 	"regexp"
-	
+	"reflect"
+	"syscall"
+	"time"
+
 	// "github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
 
-//////////////////////////////////
-///////// ImgFileFactory /////////
-//////////////////////////////////
 
-func getImgFile() (*ImgFiler, error) {
+func ImgFileFactory(path os.DirEntry, prefix string) (*ImgFiler, error) {
+	fileinfo, err := path.Info() // os.FileInfo type
+
+	if err != nil {
+		// fmt.Fprintln(os.Stderr, err)
+		// os.Exit(1)
+		return nil, err
+	}
+	fname := fileinfo.Name()
+	extension, editorFile := fileExtension(fname)
+
+	fmt.Println(extension, editorFile)
+
+	// skip if the file does not have the expected prefix
+	if strings.HasPrefix(fname, prefix) {
+		ph := newBaseImgFile(fileinfo, fname, extension, prefix)
+
+		fmt.Println("test getImgFileBase:", reflect.TypeOf(ph).Kind(), reflect.TypeOf(ph) )
+
+		return &ph, nil
+	}
+	if match, err := regexp.Match("^\\d{8}_", []byte(fname)); //string starts with 8 numbers
+	err != nil {
+		panic(err)
+	} else if match { 
+		ph := newLabelImgFile(fileinfo, fname, extension)
+		fmt.Println("test getImgFile Labeled:", reflect.TypeOf(ph).Kind(), reflect.TypeOf(ph) )
+		return &ph, nil
+	}
+
 	return nil, nil
 }
+
+func fileExtension(fileName string) (string, bool) {
+	for _, ext := range base_extensions {
+		if strings.HasSuffix(fileName, ext) {
+			return ext, false
+		}
+	}
+	for _, ext := range editor_extensions {
+		if strings.HasSuffix(fileName, ext) {
+			return ext, true
+		}
+	}
+	return "", false //handle unexpected file extension
+}
+
 
 
 ////////////////////////////
@@ -28,7 +70,6 @@ func getImgFile() (*ImgFiler, error) {
 
 type ImgFiler interface {
 	String() string
-	//New(os.DirEntry, string) *T
 	IsEmpty() bool
 	TidyName(string, int) string
 }
@@ -69,6 +110,8 @@ func New(path os.DirEntry, prefix string) *ImgFile {
 			fExtension = val
 		}
 	}
+	k, _ := ImgFileFactory(path, prefix)
+	print(k != nil)
 	return newImgFile(fileinfo, fname, fExtension, prefix)
 }
 
@@ -91,6 +134,25 @@ func newImgFile(fileinfo os.FileInfo, fname string, fExtension string, prefix st
 	log.Warn().Str("file", fname).Msg("something went wrong with the creation")
 	return new(ImgFile)
 }
+
+
+func (file ImgFile) TidyName(term string, idx int) string {
+	return file.generated_date + "_" + term + "_" + strconv.Itoa(idx) + file.extension
+}
+func (file ImgFile) IsEmpty() bool {
+	return file.extension == "" && file.prefix == "" && file.enum == 0 //&& file.labels == ""
+}
+
+
+/////////////////////////////////////////////
+
+/////////////////////////////////////////////
+
+/////////////////////////////////////////////
+
+///////////// TO DELETE
+
+
 
 // expect string in a format eg. "20220102_landscape_1.JPEG"
 func newWithDate(fileinfo os.FileInfo, fname string, fExtension string) (*ImgFile) {
@@ -117,7 +179,6 @@ func newWithPrefix(fileinfo os.FileInfo, fname string, fExtension string, prefix
 	temp_str := strings.TrimPrefix(fname, prefix)
 	fenum, _ := strconv.Atoi(strings.TrimSuffix(temp_str, fExtension))
 
-
 	newFile := ImgFile{ 
 		//labels: fname[:strings.LastIndex(fname, ".")],
 		prefix: prefix,
@@ -126,16 +187,9 @@ func newWithPrefix(fileinfo os.FileInfo, fname string, fExtension string, prefix
 		full_name: fname,
 		generated_date: unix_filetime(fileinfo),
 	}
-
 	return &newFile
 }
 
-func (file ImgFile) TidyName(term string, idx int) string {
-	return file.generated_date + "_" + term + "_" + strconv.Itoa(idx) + file.extension
-}
-func (file ImgFile) IsEmpty() bool {
-	return file.extension == "" && file.prefix == "" && file.enum == 0 //&& file.labels == ""
-}
 
 ////////////////////////////
 ////// util functions //////

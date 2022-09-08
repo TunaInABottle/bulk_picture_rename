@@ -17,7 +17,8 @@ import (
 
 
 var editor_extensions []string = []string{".ORF.dop", ".JPG.dop"}
-var allowedExtensions []string = append([]string{".ORF", ".JPG"}, editor_extensions...)
+var base_extensions []string = []string{".ORF", ".JPG"}
+var allowedExtensions []string = append(base_extensions, editor_extensions...)
 const allow_rename = false //disabled during debugging
 const impDate = ymdDate("20000231") // 31st february 2000, used for mapping editor files
 
