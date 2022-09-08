@@ -1,15 +1,10 @@
 package imgfile
 
 import (
-
 	"os"
 	"fmt"
-	// "syscall"
 	"time"
 	"strconv"
-	// "strings"
-	// "regexp"
-	// "errors"
 	
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -25,8 +20,6 @@ const impDate = ymdDate("20000231") // 31st february 2000, used for mapping edit
 func init() {
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: time.RFC3339})
 }
-
-// TODO interface to decouple ImgFile and a future struct
 
 ///////////////////////////////
 /////////  ImgFileSet /////////
@@ -120,7 +113,7 @@ func (fileset ImgFileSet) String() {
 }
 
 // put editor files in the same map of the original file
-// change with change on editor file
+// as editor files have beeen created in a different day
 func (fileset *ImgFileSet) RecoverEditorFiles() {
 	recoveryMaps := fileset.dIS.GetIndexMaps(impDate)
 
@@ -142,84 +135,9 @@ func (fileset *ImgFileSet) RecoverEditorFiles() {
 	}
 }
 
-//////////////////////////////
-///////// dateIdxSet /////////
-//////////////////////////////
 
-// stores for each date and index, a slice of images
-type dateIdxSet struct {
-	path_DIS map[ymdDate]map[string][]ImgFile
-}
 
-func (dis *dateIdxSet) createDISMaps(dateKey ymdDate) {
-	if dis.path_DIS == nil {
-		dis.path_DIS = make(map[ymdDate]map[string][]ImgFile)
-	}
-	if dis.path_DIS[dateKey] == nil {
-		dis.path_DIS[dateKey] = make(map[string][]ImgFile)
-	}
-}
-func (dis *dateIdxSet) Add(dateKey ymdDate, idx string, file ImgFile) {
-	dis.createDISMaps(dateKey)
-	dis.path_DIS[dateKey][idx] = append(dis.path_DIS[dateKey][idx], file)
-}
-func (dis dateIdxSet) GetIndexMaps(date ymdDate) map[string][]ImgFile {
-	return dis.path_DIS[date]
-}
-func (dis dateIdxSet) GetImgFiles(date ymdDate, idx string) []ImgFile {
-	// @TODO check empty maps?
-	return dis.path_DIS[date][idx]
-}
-func (dis dateIdxSet) String() string {
-	var retString string
-	for common_date, scd_map := range dis.path_DIS {
-		retString += common_date.String() + "\n"
-		for common_idx, file_slice := range scd_map{
-			retString += " ↳" + common_idx + "\n"
-			for _, val := range file_slice {
-				retString += " | ↳" + val.String() + "\n"
-			}
-		}
-	}
-	return retString
-}
-func (dis *dateIdxSet) deleteDate(dateToDel ymdDate) {
-	delete(dis.path_DIS, dateToDel)
-}
 
-////////////////////////////////
-///////// dateLabelIdx /////////
-////////////////////////////////
-//helps to find the existing indexes of labels
-
-type dateLabelIdx struct {
-	mapDLI map[ymdDate]map[string]int 
-}
-
-func (dli *dateLabelIdx) createMissingMaps(dateKey ymdDate) {
-	if dli.mapDLI == nil {
-		dli.mapDLI = make(map[ymdDate]map[string]int)
-	}
-	if dli.mapDLI[dateKey] == nil {
-		dli.mapDLI[dateKey] = make(map[string]int)
-	}
-}
-func (dli *dateLabelIdx) SetIdx(dateKey ymdDate, label string, val int) {
-	dli.createMissingMaps(dateKey)
-	log.Debug().Str("date", dateKey.String()).Str("label", label).Int("val", val).Str("func", "dateLabelIdx").Msg("setting value")
-	dli.mapDLI[dateKey][label] = max(dli.mapDLI[dateKey][label], val)
-}
-func (dli *dateLabelIdx) increaseIdx(dateKey ymdDate, label string) {
-	dli.createMissingMaps(dateKey)
-	// @TODO how to distinguish TUNA from already named?
-	dli.mapDLI[dateKey][label] += 1
-}
-func (dli dateLabelIdx) getIdx(dateKey ymdDate, label string) int {
-	dli.createMissingMaps(dateKey)
-	// @TODO what if 0 (not initialised)?
-	// log.Debug().Str("date", dateKey.String()).Str("label", label).Str("func", "dateLabelIdx").Msg("getting value")
-	return dli.mapDLI[dateKey][label]
-}
 
 ////////////////////////////
 ////// util functions //////
